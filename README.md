@@ -11,6 +11,7 @@ Browse your PhotoPrism albums on the big screen with two clicks — no app store
 - Date & location overlay
 - Clock on the album screen
 - Pause/resume on click
+- Mute / Unmute for videos
 - Prev/Next controls (auto-hide)
 - Runs in Docker — one small container
 
