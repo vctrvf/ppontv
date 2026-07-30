@@ -122,6 +122,7 @@ function albumsPage(albums) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ppontv</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #0a0a0f; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; height: 100vh; }
@@ -205,6 +206,18 @@ function albumsPage(albums) {
   #exit-btn.hidden { opacity: 0; pointer-events: none; }
   #exit-btn:hover { background: rgba(167,139,250,0.3); }
 
+  #spinner {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px; height: 60px;
+    border: 4px solid rgba(255,255,255,0.2);
+    border-top-color: #a78bfa;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: none;
+  }
+  @keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+
   .loading {
     position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
     background: #0a0a0f; z-index: 200; font-size: 1.2rem; color: #a78bfa; letter-spacing: 2px;
@@ -221,7 +234,9 @@ function albumsPage(albums) {
 <div id="albums">${albumCards}</div>
 
 <div id="slideshow" onclick="togglePause(event)">
-  <img id="slide-img" src="" alt="">
+  <img id="slide-img" src="" alt="" style="display:none">
+  <video id="slide-video" muted playsinline
+    style="display:none; width:100%; height:100%; object-fit:contain;"></video>
   <div id="slide-overlay">
     <div id="slide-album"></div>
     <div id="slide-date"></div>
@@ -229,8 +244,10 @@ function albumsPage(albums) {
   </div>
   <div id="slide-counter"></div>
   <div id="slide-progress"></div>
+  <div id="spinner"></div>
   <div id="slide-controls" class="hidden">
     <button onclick="event.stopPropagation(); showPhoto(currentIdx - 1)">&#8249;</button>
+    <button id="sound-btn" onclick="event.stopPropagation(); toggleSound()" style="font-size:1.4rem; padding: 4px 14px;">🔇</button>
     <button onclick="event.stopPropagation(); showPhoto(currentIdx + 1)">&#8250;</button>
   </div>
   <button id="exit-btn" class="hidden" onclick="event.stopPropagation(); exitSlideshow()">✕ Exit</button>
@@ -242,7 +259,13 @@ function albumsPage(albums) {
 const CFG = ${JSON.stringify(cfg)};
 
 let photos = [], currentIdx = 0, slideshowTimer = null, albumTitle = '';
-let paused = false, hideTimer = null;
+let paused = false, hideTimer = null, muted = true;
+
+function toggleSound() {
+  muted = !muted;
+  document.getElementById('slide-video').muted = muted;
+  document.getElementById('sound-btn').textContent = muted ? '🔇' : '🔊';
+}
 
 function updateClock() {
   const now = new Date();
@@ -270,32 +293,56 @@ function showPhoto(idx) {
   currentIdx = (idx + photos.length) % photos.length;
   const photo = photos[currentIdx];
   const img = document.getElementById('slide-img');
+  const vid = document.getElementById('slide-video');
+  const isVideo = photo.Type === 'video';
 
-  img.style.opacity = 0;
-  img.onload = () => { img.style.opacity = 1; };
-  img.src = '/proxy/t/' + photo.Hash + '/fit_1920';
+  img.style.display = isVideo ? 'none' : 'block';
+  vid.style.display = isVideo ? 'block' : 'none';
+
+  if (isVideo) {
+    // Show thumbnail while video loads
+    img.style.display = 'block';
+    img.style.opacity = 1;
+    img.src = '/proxy/t/' + photo.Hash + '/fit_1920';
+    vid.style.display = 'none';
+    vid.src = '/proxy/video/' + photo.Hash;
+    vid.muted = muted;
+    document.getElementById('spinner').style.display = 'block';
+    vid.oncanplay = () => {
+      document.getElementById('spinner').style.display = 'none';
+      img.style.display = 'none';
+      vid.style.display = 'block';
+      vid.style.opacity = 1;
+      vid.play();
+    };
+    vid.onended = () => { if (!paused) showPhoto(currentIdx + 1); };
+    clearTimeout(slideshowTimer);
+  } else {
+    document.getElementById('spinner').style.display = 'none';
+    vid.pause(); vid.src = '';
+    img.style.opacity = 0;
+    img.onload = () => { img.style.opacity = 1; };
+    img.src = '/proxy/t/' + photo.Hash + '/fit_1920';
+    const bar = document.getElementById('slide-progress');
+    bar.style.transition = 'none';
+    bar.style.width = '0%';
+    if (!paused) {
+      setTimeout(() => {
+        bar.style.transition = 'width ' + (CFG.interval / 1000) + 's linear';
+        bar.style.width = '100%';
+      }, 50);
+    }
+    clearTimeout(slideshowTimer);
+    if (!paused) slideshowTimer = setTimeout(() => showPhoto(currentIdx + 1), CFG.interval);
+  }
 
   document.getElementById('slide-album').textContent = albumTitle;
   document.getElementById('slide-counter').textContent = (currentIdx + 1) + ' / ' + photos.length;
-
   const takenAt = photo.TakenAt ? new Date(photo.TakenAt) : null;
   document.getElementById('slide-date').textContent = takenAt
     ? takenAt.toLocaleDateString([], {year:'numeric', month:'long', day:'numeric'}) : '';
   const loc = [photo.PhotoCity, photo.PhotoCountry].filter(Boolean).join(', ');
   document.getElementById('slide-location').textContent = loc;
-
-  const bar = document.getElementById('slide-progress');
-  bar.style.transition = 'none';
-  bar.style.width = paused ? '0%' : '0%';
-  if (!paused) {
-    setTimeout(() => {
-      bar.style.transition = 'width ' + (CFG.interval / 1000) + 's linear';
-      bar.style.width = '100%';
-    }, 50);
-  }
-
-  clearTimeout(slideshowTimer);
-  if (!paused) slideshowTimer = setTimeout(() => showPhoto(currentIdx + 1), CFG.interval);
 }
 
 function togglePause(e) {
@@ -327,6 +374,8 @@ function exitSlideshow() {
   paused = false;
   document.getElementById('slideshow').style.display = 'none';
   document.getElementById('slide-img').src = '';
+  const vid = document.getElementById('slide-video');
+  vid.pause(); vid.src = '';
 }
 
 // Show controls on mouse move
@@ -352,6 +401,13 @@ const server = http.createServer(async (req, res) => {
   const pathname = parsedUrl.pathname;
   config = loadConfig();
 
+  if (pathname === '/favicon.ico' || pathname === '/favicon.svg') {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#0a0a0f"/><rect x="4" y="8" width="24" height="14" rx="2" fill="#a78bfa"/><rect x="6" y="10" width="20" height="10" rx="1" fill="#0a0a0f"/><rect x="12" y="22" width="8" height="2" fill="#a78bfa"/><rect x="10" y="24" width="12" height="1.5" rx="1" fill="#a78bfa"/><polygon points="13,13 13,17 19,15" fill="#a78bfa"/></svg>';
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+    res.end(svg);
+    return;
+  }
+
   if (pathname === '/') {
     try {
       await ensureSession();
@@ -372,6 +428,33 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(photos));
     } catch (e) { res.writeHead(500); res.end('[]'); }
+    return;
+  }
+
+  // Video proxy: /proxy/video/<hash>
+  if (pathname.startsWith('/proxy/video/')) {
+    try {
+      await ensureSession();
+      const hash = pathname.split('/')[3];
+      const ppPath = `/api/v1/videos/${hash}/${previewToken}/avc`;
+      const baseUrl = new URL(config.PHOTOPRISM_URL);
+      const isHttps = baseUrl.protocol === 'https:';
+      const options = {
+        hostname: baseUrl.hostname,
+        port: baseUrl.port || (isHttps ? 443 : 80),
+        path: ppPath, method: 'GET',
+        headers: { 'X-Auth-Token': sessionToken },
+      };
+      const ppReq = (isHttps ? https : http).request(options, ppRes => {
+        res.writeHead(ppRes.statusCode, {
+          'Content-Type': ppRes.headers['content-type'] || 'video/mp4',
+          'Cache-Control': 'public, max-age=86400',
+        });
+        ppRes.pipe(res);
+      });
+      ppReq.on('error', () => { res.writeHead(502); res.end(); });
+      ppReq.end();
+    } catch (e) { res.writeHead(500); res.end(); }
     return;
   }
 
