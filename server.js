@@ -5,9 +5,9 @@ const url = require('url');
 
 function loadConfig() {
   const config = {
-    PHOTOPRISM_URL: 'http://localhost:2342',
-    PHOTOPRISM_USER: 'admin',
-    PHOTOPRISM_PASSWORD: 'family',
+    PHOTOPRISM_URL: 'http://your-photoprism-host:2342',
+    PHOTOPRISM_USER: 'your-username',
+    PHOTOPRISM_PASSWORD: 'your-password',
     SLIDESHOW_INTERVAL: '5',
     SLIDESHOW_RANDOM: 'false',
     SHOW_INFO_OVERLAY: 'true',
